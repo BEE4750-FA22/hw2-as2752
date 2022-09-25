@@ -1,0 +1,244 @@
+---
+title: "BEE 4750/5750 Homework 2"
+author: "Akanksha Srivastava (as2752)"
+date: `j import Dates; Dates.Date(Dates.now())`
+weave_options:
+    term: true
+    results: tex
+    cache: off
+---
+
+<!-- This setups the environment and installs packages, but doesn't appear in the generated document -->
+<!-- You shouldn't need to modify this -->
+```julia; echo = false; results = "hidden"
+using Pkg
+Pkg.activate(".")
+Pkg.instantiate()
+```
+
+# Problem 1
+
+## Problem 1.1
+The below code calculates the dissolved oxygen concentration over $0-50km$ from waste stream 1 and plots the resulting values.
+```julia
+# Given Information
+Qr = 100000; #m3/day, river
+Q1 = 10000; #m3/day, waste stream 1
+Q2 = 15000; #m3/day, waste stream 2
+
+DOr = 7.5; #mg/L, river
+DO1 = 5; #mg/L, waste stream 1
+DO2 = 5; #mg/L, waste stream 2
+
+CBODr = 5; #mg/L, river
+CBOD1 = 50; #mg/L, waste stream 1
+CBOD2 = 45; #mg/L, waste stream 2
+
+NBODr = 5; #mg/L, river
+NBOD1 = 35; #mg/L, waste stream 1
+NBOD2 = 35; #mg/L, waste stream 2
+
+U = 6; #km/day
+ka = 0.55; #1/day, reaeration rate
+kc = 0.35; #1/day, CBOD decay rate
+kn = 0.25; #1/day, NBOD decay rate
+Cs = 10; #mg/L, saturated oxygen conc
+
+# Problem Setup
+x = 0:1:50; #km, downstream distance from waste source 1
+DO = zeros(length(x)); #mg/L, initialization
+CBOD = zeros(length(x)); #mg/L, initialization
+NBOD = zeros(length(x)); #mg/L, initialization
+C0 = (Qr*DOr + Q1*DO1) / (Qr+Q1); #mg/L, DO conc after waste stream 1
+B0 = (Qr*CBODr + Q1*CBOD1) / (Qr+Q1); #mg/L, CBOD conc after waste stream 1
+N0 = (Qr*NBODr + Q1*NBOD1) / (Qr+Q1); #mg/L, NBOD conc after waste stream 1
+
+# Function Definition
+function DO_conc(Cs, C0, B0, N0, ka, kc, kn, x, U)
+  a1 = exp(-ka*x/U)
+  a2 = (kc/(ka-kc))*(exp(-kc*x/U)-exp(-ka*x/U))
+  a3 = (kn/(ka-kn))*(exp(-kn*x/U)-exp(-ka*x/U))
+  C = Cs*(1-a1)+C0*a1-B0*a2-N0*a3
+  return C
+end
+
+# Waste Stream 1: 0-14 km
+for i in 1:16
+  DO[i] = DO_conc(Cs, C0, B0, N0, ka, kc, kn, x[i], U);
+  CBOD[i] = B0*exp(-kc*x[i]/U);
+  NBOD[i] = N0*exp(-kn*x[i]/U);
+end
+
+# Waste Stream 2: 15-50 km
+C0_new = (DO[16]*(Qr+Q1) + DO2*Q2) / (Qr+Q1+Q2);
+B0_new = (CBOD[16]*(Qr+Q1) + CBOD2*Q2) / (Qr+Q1+Q2);
+N0_new = (NBOD[16]*(Qr+Q1) + NBOD2*Q2) / (Qr+Q1+Q2);
+
+for i in 16:51
+  DO[i] = DO_conc(Cs, C0_new, B0_new, N0_new, ka, kc, kn, x[i]-15, U)
+  CBOD[i] = B0*exp(-kc*(x[i]-15)/U);
+  NBOD[i] = N0*exp(-kn*(x[i]-15)/U);
+end
+
+# Plotting Dissolved Oxygen
+using Plots
+plot(x,DO, title="Dissolved Oxygen Along Stream", label="Dissolved Oxygen", xlabel="Distance (km)", ylabel="Concentration (mg/L)")
+```
+
+## Problem 1.2
+Based on the plot from Problem 1.1, we can guess that the dissolved oxygen concentration of the river recovers to 6 mg/L
+somewhere in between 40 and 45 km. The following Julia code employs the bisection method for root finding and employs this method 
+to determine the requested distance from waste stream 2.
+
+```julia
+#Setting up Bisection Method
+val = 6; #mg/L
+tol = 0.001; #mg/L
+L = 40; #km
+R = 45; #km
+
+#Employing Bisection Method
+while R - L > tol
+  mid = (R+L)/2
+  DO_mid = DO_conc(Cs, C0_new, B0_new, N0_new, ka, kc, kn, mid-15, U);
+  if DO_mid == val
+    break
+  elseif DO_mid < val
+    global L = mid
+  else
+    global R = mid
+  end
+end
+
+#Calculating Recovery Distance
+recovery_distance = (R+L)/2 - 15;
+print(recovery_distance)
+```
+
+The output of this code says that the dissolved oxygen concentration recovers to 6 mg/L at approximately 41.16 km, or 26.16 km from Waste Stream 2.
+
+## Problem 1.3
+We can test several values of organic waste removal treatment, starting from 0% and increasing by 1%. With each removal, we will alter
+the Waste Stream 2 values accordingly and perform the calculations from Problem 1.1 again. If the minimum of the DO levels after the entrance 
+to Waste Stream 2 is lower than 4, we increase the level of treatment.
+
+```julia
+DO_removal = DO[1:51]; #initializing DO list with 0% removal values
+treatment = 0;
+while minimum(DO_removal) < 4
+  global treatment = treatment + 0.01;
+
+  # New Waste Stream 2 content
+  CBOD2_treated = (1-treatment) * CBOD2;
+  NBOD2_treated = (1-treatment) * NBOD2;
+
+  # New river content post Waste Stream 2;
+  B0_treated = (CBOD[16]*(Qr+Q1) + CBOD2_treated*Q2) / (Qr+Q1+Q2);
+  N0_treated = (NBOD[16]*(Qr+Q1) + NBOD2_treated*Q2) / (Qr+Q1+Q2);
+
+  # Recalculating DO after combination of river and Waste Stream 2
+  for i in 16:51
+    DO_removal[i] = DO_conc(Cs, C0, B0_treated, N0_treated, ka, kc, kn, x[i]-15, U)
+  end
+end
+
+print(treatment)
+```
+
+Based on the above code, the treatment level of Waste Stream 2 that will keep the DO concentrations of the stream above 4 mg/L 
+is 51% (to the closest 1%).
+
+## Problem 1.4
+We will employ the same method as Problem 1.3, but alter the values from Waste Stream 1 AND Waste Stream 2 using our tested treatments.
+After a couple of test cases, it is noted that the level of treatment is much lower than in Problem 1.3, so we increase our treatment tests
+in increments of 0.1% instead of 1%. 
+
+```julia
+DO_treated = DO[1:51]; #initializing DO list with 0% removal values
+treatment2 = 0;
+
+while minimum(DO_treated) < 4
+  global treatment2 = treatment2 + 0.001;
+
+  # New Waste Stream 1 content
+  CBOD1_treated = (1-treatment2) * CBOD1;
+  NBOD1_treated = (1-treatment2) * NBOD1;
+
+  # New river content post Waste Stream 1
+  B01_treated = (Qr*CBODr + Q1*CBOD1_treated) / (Qr+Q1);
+  N01_treated = (Qr*NBODr + Q1*NBOD1_treated) / (Qr+Q1);
+
+  # Waste Stream 1: 0-14 km
+  for i in 1:16
+    DO_treated[i] = DO_conc(Cs, C0, B01_treated, N01_treated, ka, kc, kn, x[i], U);
+  end
+
+  # New Waste Stream 2 content
+  CBOD2_treated = (1-treatment2) * CBOD2;
+  NBOD2_treated = (1-treatment2) * NBOD2;
+
+  # New river content post Waste Stream 2;
+  CBOD_15t = B01_treated*exp(-kc*15/U);
+  NBOD_15t = N01_treated*exp(-kn*15/U);
+  C02_treated = (DO_treated[16]*(Qr+Q1) + DO2*Q2) / (Qr+Q1+Q2);
+  B02_treated = (CBOD_15t*(Qr+Q1) + CBOD2_treated*Q2) / (Qr+Q1+Q2);
+  N02_treated = (NBOD_15t*(Qr+Q1) + NBOD2_treated*Q2) / (Qr+Q1+Q2);
+
+  # Waste Stream 2: 15-50 km
+  for i in 16:51
+    DO_treated[i] = DO_conc(Cs, C02_treated, B02_treated, N02_treated, ka, kc, kn, x[i]-15, U)
+  end
+end
+
+print(treatment2)
+```
+
+Based on the above code, the minimum level of treatment to both streams is 6.6%.
+
+## Problem 1.5
+From Problems 1.3 and 1.4, treating Waste Stream 2 solely would require a 51% organics removal, whereas treating both streams 
+simultaneously would require 6.6% organics removal in both streams. Based on these numbers alone and assuming there is a linear 
+relationship between cost and the % removal, I would opt to treat both streams equally. This is equivalent to paying 13.2 units of cost 
+(6.6 for each stream) as opposed to 51 units of cost.
+
+However, this assumption of a linear relationship between cost and removal is not necessarily accurate. Installing a treatment system in 
+two facilities as opposed to one could prove to be significantly more expensive just in installation/capital costs. Furthermore, there is 
+most likely a diminishing marginal cost for every additional percentage of removal, which means that removing the 6th percent in the 
+double-treatment approach could be significantly more expensive than removing the 50th percent in the single-treatment approach. Without 
+knowing this information, it is difficult to make a definitive conclusion.
+
+## Problem 1.6
+Suppose now that the CBOD and NBOD values of the river inflow are uncertain. Suppose that your estimates of CBOD vary uniformly 
+between 4 and 7 mg/L, and NBOD estimates vary uniformly between 3 and 8 mg/L. If you assume these values are independent, what is 
+the probability that the strategy you identified in Problem 1.5 will fail to keep the dissolved oxygen concentration above 4 mg/L?
+
+## Problem 1.7
+Now suppose that the CBOD and NBOD values are correlated: specifically, they have a correlation coefficient of 0.7. 
+How does that impact the probability of maintain- ing a dissolved oxygen concentration above 4 mg/L under the treatment strategy 
+from Problems 1.5? The solution template includes a code block defining a function sample_correlated_uniform() that you can use 
+to produce correlated uniform variates.
+
+```julia; echo=false
+# This block will not show up in compiled output.
+
+using Distributions
+using PDMats
+
+# This function samples n correlated variates distributed over 
+# Uniform([a[1], a[2]]) and Uniform([b[1], b[2]]) with correlation coefficient
+# corr_coef.
+function sample_correlated_uniform(n, a, b, corr_coef=0.7)
+  mvnorm = MvNormal([0, 0], PDMat([1 corr_coef; corr_coef 1])) # set up a multivariate normal with each marginal variance of 1 and the right correlation
+  norm_samples = rand(mvnorm, n)' # sample from the multivariate normal, the marginal distributions are a standard normal
+  unif_samples = cdf.(Normal(0, 1), norm_samples) # convert samples to a uniform distribution using the pdf of a standard Normal
+  samples = (unif_samples .* [a[2] - a[1] b[2] - b[1]]) .+ [a[1] b[1]]
+  return samples
+end
+```
+
+## Problem 1.8
+Discuss how the presence of uncertainty and dependence between variables might affect your decision-making process. 
+Would you stick with the same strategy as in Problem 1.5, or find a new strategy? What other information would you need, if any?
+
+# References
+1. Bisection Method in Julia: https://mmas.github.io/bisection-method-julia 
