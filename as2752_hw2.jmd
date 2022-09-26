@@ -87,7 +87,7 @@ plot(x,DO, title="Dissolved Oxygen Along Stream", label="Dissolved Oxygen", xlab
 
 ## Problem 1.2
 Based on the plot from Problem 1.1, we can guess that the dissolved oxygen concentration of the river recovers to 6 mg/L
-somewhere in between 40 and 45 km. The following Julia code employs the bisection method for root finding and employs this method 
+somewhere in between 40 and 45 km. The following Julia code employs the bisection method for root finding 
 to determine the requested distance from waste stream 2.
 
 ```julia
@@ -208,9 +208,63 @@ double-treatment approach could be significantly more expensive than removing th
 knowing this information, it is difficult to make a definitive conclusion.
 
 ## Problem 1.6
-Suppose now that the CBOD and NBOD values of the river inflow are uncertain. Suppose that your estimates of CBOD vary uniformly 
-between 4 and 7 mg/L, and NBOD estimates vary uniformly between 3 and 8 mg/L. If you assume these values are independent, what is 
-the probability that the strategy you identified in Problem 1.5 will fail to keep the dissolved oxygen concentration above 4 mg/L?
+The strategy chosen in Problem 1.5 is the 6.6% removal from both streams. Here we will redo Problem 1.1 but incorporate this treatment 
+and test over the given range of CBOD (4-7 mg/L) and NBOD (3-8 mg/L) to determine probability.
+
+```julia
+fails = 0;
+DO_probability = zeros(length(x));
+
+# Note: flow rates, DO concs, decay rates, velocity, sat oxygen are same
+
+# Treated values, subscript 6 to represent this problem
+treatment = 0.066;
+CBOD1_6 = (1-treatment)*CBOD1;
+CBOD2_6 = (1-treatment)*CBOD2;
+NBOD1_6 = (1-treatment)*NBOD1;
+NBOD2_6 = (1-treatment)*NBOD2;
+
+# River Ranges
+CBOD_range = 4:0.1:7;
+NBOD_range = 3:0.1:8;
+
+for i in 1:length(CBOD_range)
+  for j in 1:length(NBOD_range)
+    CBOD_6 = CBOD_range[i];
+    NBOD_6 = NBOD_range[j];
+    DO_6 = zeros(length(x));
+
+    C01_6 = (Qr*DOr + Q1*DO1) / (Qr+Q1);
+    B01_6 = (Qr*CBOD_6 + Q1*CBOD1_6) / (Qr+Q1);
+    N01_6 = (Qr*NBOD_6 + Q1*NBOD1_6) / (Qr+Q1);
+
+    # Waste Stream 1: 0-14 km
+    for i in 1:16
+      DO_probability[i] = DO_conc(Cs, C01_6, B01_6, N01_6, ka, kc, kn, x[i], U);
+    end
+
+    # Waste Stream 2: 15-50 km
+    CBOD2_river = B01_6*exp(-kc*15/U);
+    NBOD2_river = N01_6*exp(-kn*15/U);
+    C02_6 = (DO_probability[16]*(Qr+Q1) + DO2*Q2) / (Qr+Q1+Q2);
+    B02_6 = (CBOD2_river*(Qr+Q1) + CBOD2_6*Q2) / (Qr+Q1+Q2);
+    N02_6 = (NBOD2_river*(Qr+Q1) + NBOD2_6*Q2) / (Qr+Q1+Q2);
+
+    for i in 16:51
+      DO_probability[i] = DO_conc(Cs, C02_6, B02_6, N02_6, ka, kc, kn, x[i], U);
+    end
+
+    if minimum(DO_probability) < 4
+      global fails = fails + 1;
+    end
+  end
+end
+
+probability = fails/(length(CBOD_range)*length(NBOD_range));
+print(probability);
+```
+
+As shown the results of the above code, the probability of the strategy identified in Problem 1.5 failing is approximately 5.5%.
 
 ## Problem 1.7
 Now suppose that the CBOD and NBOD values are correlated: specifically, they have a correlation coefficient of 0.7. 
