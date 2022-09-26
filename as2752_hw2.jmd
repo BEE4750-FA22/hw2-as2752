@@ -49,9 +49,9 @@ x = 0:1:50; #km, downstream distance from waste source 1
 DO = zeros(length(x)); #mg/L, initialization
 CBOD = zeros(length(x)); #mg/L, initialization
 NBOD = zeros(length(x)); #mg/L, initialization
-C0 = (Qr*DOr + Q1*DO1) / (Qr+Q1); #mg/L, DO conc after waste stream 1
-B0 = (Qr*CBODr + Q1*CBOD1) / (Qr+Q1); #mg/L, CBOD conc after waste stream 1
-N0 = (Qr*NBODr + Q1*NBOD1) / (Qr+Q1); #mg/L, NBOD conc after waste stream 1
+C01_1 = (Qr*DOr + Q1*DO1) / (Qr+Q1); #mg/L, DO conc after waste stream 1
+B01_1 = (Qr*CBODr + Q1*CBOD1) / (Qr+Q1); #mg/L, CBOD conc after waste stream 1
+N01_1 = (Qr*NBODr + Q1*NBOD1) / (Qr+Q1); #mg/L, NBOD conc after waste stream 1
 
 # Function Definition
 function DO_conc(Cs, C0, B0, N0, ka, kc, kn, x, U)
@@ -64,20 +64,18 @@ end
 
 # Waste Stream 1: 0-14 km
 for i in 1:16
-  DO[i] = DO_conc(Cs, C0, B0, N0, ka, kc, kn, x[i], U);
-  CBOD[i] = B0*exp(-kc*x[i]/U);
-  NBOD[i] = N0*exp(-kn*x[i]/U);
+  DO[i] = DO_conc(Cs, C01_1, B01_1, N01_1, ka, kc, kn, x[i], U);
+  CBOD[i] = B01_1*exp(-kc*x[i]/U);
+  NBOD[i] = N01_1*exp(-kn*x[i]/U);
 end
 
 # Waste Stream 2: 15-50 km
-C0_new = (DO[16]*(Qr+Q1) + DO2*Q2) / (Qr+Q1+Q2);
-B0_new = (CBOD[16]*(Qr+Q1) + CBOD2*Q2) / (Qr+Q1+Q2);
-N0_new = (NBOD[16]*(Qr+Q1) + NBOD2*Q2) / (Qr+Q1+Q2);
+C02_1 = (DO[16]*(Qr+Q1) + DO2*Q2) / (Qr+Q1+Q2);
+B02_1 = (CBOD[16]*(Qr+Q1) + CBOD2*Q2) / (Qr+Q1+Q2);
+N02_1 = (NBOD[16]*(Qr+Q1) + NBOD2*Q2) / (Qr+Q1+Q2);
 
 for i in 16:51
-  DO[i] = DO_conc(Cs, C0_new, B0_new, N0_new, ka, kc, kn, x[i]-15, U)
-  CBOD[i] = B0*exp(-kc*(x[i]-15)/U);
-  NBOD[i] = N0*exp(-kn*(x[i]-15)/U);
+  DO[i] = DO_conc(Cs, C02_1, B02_1, N02_1, ka, kc, kn, x[i]-15, U)
 end
 
 # Plotting Dissolved Oxygen
@@ -100,7 +98,7 @@ R = 45; #km
 #Employing Bisection Method
 while R - L > tol
   mid = (R+L)/2
-  DO_mid = DO_conc(Cs, C0_new, B0_new, N0_new, ka, kc, kn, mid-15, U);
+  DO_mid = DO_conc(Cs, C02_1, B02_1, N02_1, ka, kc, kn, mid-15, U);
   if DO_mid == val
     break
   elseif DO_mid < val
@@ -118,27 +116,27 @@ print(recovery_distance)
 The output of this code says that the dissolved oxygen concentration recovers to 6 mg/L at approximately 41.16 km, or 26.16 km from Waste Stream 2.
 
 ## Problem 1.3
-We can test several values of organic waste removal treatment, starting from 0% and increasing by 1%. With each removal, we will alter
+We can test several values of organic waste removal treatment, starting from 0% and increasing by 0.1%. With each removal, we will alter
 the Waste Stream 2 values accordingly and perform the calculations from Problem 1.1 again. If the minimum of the DO levels after the entrance 
 to Waste Stream 2 is lower than 4, we increase the level of treatment.
 
 ```julia
-DO_removal = DO[1:51]; #initializing DO list with 0% removal values
+DO_3 = DO[1:51]; #initializing DO list with 0% removal values
 treatment = 0;
-while minimum(DO_removal) < 4
-  global treatment = treatment + 0.01;
+while minimum(DO_3) < 4
+  global treatment = treatment + 0.001;
 
   # New Waste Stream 2 content
-  CBOD2_treated = (1-treatment) * CBOD2;
-  NBOD2_treated = (1-treatment) * NBOD2;
+  CBOD2_3 = (1-treatment) * CBOD2;
+  NBOD2_3 = (1-treatment) * NBOD2;
 
   # New river content post Waste Stream 2;
-  B0_treated = (CBOD[16]*(Qr+Q1) + CBOD2_treated*Q2) / (Qr+Q1+Q2);
-  N0_treated = (NBOD[16]*(Qr+Q1) + NBOD2_treated*Q2) / (Qr+Q1+Q2);
+  B02_3 = (CBOD[16]*(Qr+Q1) + CBOD2_3*Q2) / (Qr+Q1+Q2);
+  N02_3 = (NBOD[16]*(Qr+Q1) + NBOD2_3*Q2) / (Qr+Q1+Q2);
 
   # Recalculating DO after combination of river and Waste Stream 2
   for i in 16:51
-    DO_removal[i] = DO_conc(Cs, C0, B0_treated, N0_treated, ka, kc, kn, x[i]-15, U)
+    DO_3[i] = DO_conc(Cs, C02_1, B02_3, N02_3, ka, kc, kn, x[i]-15, U)
   end
 end
 
@@ -146,47 +144,45 @@ print(treatment)
 ```
 
 Based on the above code, the treatment level of Waste Stream 2 that will keep the DO concentrations of the stream above 4 mg/L 
-is 51% (to the closest 1%).
+is 11.7%.
 
 ## Problem 1.4
 We will employ the same method as Problem 1.3, but alter the values from Waste Stream 1 AND Waste Stream 2 using our tested treatments.
-After a couple of test cases, it is noted that the level of treatment is much lower than in Problem 1.3, so we increase our treatment tests
-in increments of 0.1% instead of 1%. 
 
 ```julia
-DO_treated = DO[1:51]; #initializing DO list with 0% removal values
+DO_4 = DO[1:51]; #initializing DO list with 0% removal values
 treatment2 = 0;
 
-while minimum(DO_treated) < 4
+while minimum(DO_4) < 4
   global treatment2 = treatment2 + 0.001;
 
   # New Waste Stream 1 content
-  CBOD1_treated = (1-treatment2) * CBOD1;
-  NBOD1_treated = (1-treatment2) * NBOD1;
+  CBOD1_4 = (1-treatment2) * CBOD1;
+  NBOD1_4 = (1-treatment2) * NBOD1;
 
   # New river content post Waste Stream 1
-  B01_treated = (Qr*CBODr + Q1*CBOD1_treated) / (Qr+Q1);
-  N01_treated = (Qr*NBODr + Q1*NBOD1_treated) / (Qr+Q1);
+  B01_4 = (Qr*CBODr + Q1*CBOD1_4) / (Qr+Q1);
+  N01_4 = (Qr*NBODr + Q1*NBOD1_4) / (Qr+Q1);
 
   # Waste Stream 1: 0-14 km
   for i in 1:16
-    DO_treated[i] = DO_conc(Cs, C0, B01_treated, N01_treated, ka, kc, kn, x[i], U);
+    DO_4[i] = DO_conc(Cs, C01_1, B01_4, N01_4, ka, kc, kn, x[i], U);
   end
 
   # New Waste Stream 2 content
-  CBOD2_treated = (1-treatment2) * CBOD2;
-  NBOD2_treated = (1-treatment2) * NBOD2;
+  CBOD2_4 = (1-treatment2) * CBOD2;
+  NBOD2_4 = (1-treatment2) * NBOD2;
 
   # New river content post Waste Stream 2;
-  CBOD_15t = B01_treated*exp(-kc*15/U);
-  NBOD_15t = N01_treated*exp(-kn*15/U);
-  C02_treated = (DO_treated[16]*(Qr+Q1) + DO2*Q2) / (Qr+Q1+Q2);
-  B02_treated = (CBOD_15t*(Qr+Q1) + CBOD2_treated*Q2) / (Qr+Q1+Q2);
-  N02_treated = (NBOD_15t*(Qr+Q1) + NBOD2_treated*Q2) / (Qr+Q1+Q2);
+  CBOD_15t = B01_4*exp(-kc*15/U);
+  NBOD_15t = N01_4*exp(-kn*15/U);
+  C02_4 = (DO_4[16]*(Qr+Q1) + DO2*Q2) / (Qr+Q1+Q2);
+  B02_4 = (CBOD_15t*(Qr+Q1) + CBOD2_4*Q2) / (Qr+Q1+Q2);
+  N02_4 = (NBOD_15t*(Qr+Q1) + NBOD2_4*Q2) / (Qr+Q1+Q2);
 
   # Waste Stream 2: 15-50 km
   for i in 16:51
-    DO_treated[i] = DO_conc(Cs, C02_treated, B02_treated, N02_treated, ka, kc, kn, x[i]-15, U)
+    DO_4[i] = DO_conc(Cs, C02_4, B02_4, N02_4, ka, kc, kn, x[i]-15, U)
   end
 end
 
@@ -196,37 +192,34 @@ print(treatment2)
 Based on the above code, the minimum level of treatment to both streams is 6.6%.
 
 ## Problem 1.5
-From Problems 1.3 and 1.4, treating Waste Stream 2 solely would require a 51% organics removal, whereas treating both streams 
+From Problems 1.3 and 1.4, treating Waste Stream 2 solely would require a 11.7% organics removal, whereas treating both streams 
 simultaneously would require 6.6% organics removal in both streams. Based on these numbers alone and assuming there is a linear 
-relationship between cost and the % removal, I would opt to treat both streams equally. This is equivalent to paying 13.2 units of cost 
-(6.6 for each stream) as opposed to 51 units of cost.
+relationship between cost and the % removal, I would opt to solely treat Waste Stream 2. This is equivalent to paying 11.7 units of cost 
+as opposed to 13.2 units of cost (6.6 for each stream).
 
-However, this assumption of a linear relationship between cost and removal is not necessarily accurate. Installing a treatment system in 
-two facilities as opposed to one could prove to be significantly more expensive just in installation/capital costs. Furthermore, there is 
-most likely a diminishing marginal cost for every additional percentage of removal, which means that removing the 6th percent in the 
-double-treatment approach could be significantly more expensive than removing the 50th percent in the single-treatment approach. Without 
-knowing this information, it is difficult to make a definitive conclusion.
+Note that this assumption of a linear relationship between cost and removal is not necessarily accurate. Without knowing the costs 
+associated with installation of treatment infrastructure for both the waste streams, it is difficult to make a definitive conclusion. Based 
+on what we know, however, I will opt for treating just Waste Stream 2.
 
 ## Problem 1.6
-The strategy chosen in Problem 1.5 is the 6.6% removal from both streams. Here we will redo Problem 1.1 but incorporate this treatment 
-and test over the given range of CBOD (4-7 mg/L) and NBOD (3-8 mg/L) to determine probability.
+The strategy chosen in Problem 1.5 is the 11.7% removal from Waste Stream 2. Here we will redo Problem 1.1 but incorporate this treatment 
+and test over the given uniform ranges of CBOD (4-7 mg/L) and NBOD (3-8 mg/L) to determine probability. Since the variables are independent, 
+we will test every combination of CBOD and NBOD and treat them with equal weight.
 
 ```julia
 fails = 0;
-DO_probability = zeros(length(x));
 
 # Note: flow rates, DO concs, decay rates, velocity, sat oxygen are same
+# Note: CBOD and NBOD for waste stream 1 are the same
 
 # Treated values, subscript 6 to represent this problem
-treatment = 0.066;
-CBOD1_6 = (1-treatment)*CBOD1;
+treatment = 0.117;
 CBOD2_6 = (1-treatment)*CBOD2;
-NBOD1_6 = (1-treatment)*NBOD1;
 NBOD2_6 = (1-treatment)*NBOD2;
 
 # River Ranges
-CBOD_range = 4:0.1:7;
-NBOD_range = 3:0.1:8;
+CBOD_range = 4:0.01:7;
+NBOD_range = 3:0.01:8;
 
 for i in 1:length(CBOD_range)
   for j in 1:length(NBOD_range)
@@ -234,27 +227,26 @@ for i in 1:length(CBOD_range)
     NBOD_6 = NBOD_range[j];
     DO_6 = zeros(length(x));
 
-    C01_6 = (Qr*DOr + Q1*DO1) / (Qr+Q1);
-    B01_6 = (Qr*CBOD_6 + Q1*CBOD1_6) / (Qr+Q1);
-    N01_6 = (Qr*NBOD_6 + Q1*NBOD1_6) / (Qr+Q1);
+    B01_6 = (Qr*CBOD_6 + Q1*CBOD1) / (Qr+Q1);
+    N01_6 = (Qr*NBOD_6 + Q1*NBOD1) / (Qr+Q1);
 
     # Waste Stream 1: 0-14 km
     for i in 1:16
-      DO_probability[i] = DO_conc(Cs, C01_6, B01_6, N01_6, ka, kc, kn, x[i], U);
+      DO_6[i] = DO_conc(Cs, C01_1, B01_6, N01_6, ka, kc, kn, x[i], U);
     end
 
     # Waste Stream 2: 15-50 km
     CBOD2_river = B01_6*exp(-kc*15/U);
     NBOD2_river = N01_6*exp(-kn*15/U);
-    C02_6 = (DO_probability[16]*(Qr+Q1) + DO2*Q2) / (Qr+Q1+Q2);
+    C02_6 = (DO_6[16]*(Qr+Q1) + DO2*Q2) / (Qr+Q1+Q2);
     B02_6 = (CBOD2_river*(Qr+Q1) + CBOD2_6*Q2) / (Qr+Q1+Q2);
     N02_6 = (NBOD2_river*(Qr+Q1) + NBOD2_6*Q2) / (Qr+Q1+Q2);
 
     for i in 16:51
-      DO_probability[i] = DO_conc(Cs, C02_6, B02_6, N02_6, ka, kc, kn, x[i], U);
+      DO_6[i] = DO_conc(Cs, C02_6, B02_6, N02_6, ka, kc, kn, x[i], U);
     end
 
-    if minimum(DO_probability) < 4
+    if minimum(DO_6) < 4
       global fails = fails + 1;
     end
   end
@@ -264,13 +256,11 @@ probability = fails/(length(CBOD_range)*length(NBOD_range));
 print(probability);
 ```
 
-As shown the results of the above code, the probability of the strategy identified in Problem 1.5 failing is approximately 5.5%.
+As shown the results of the above code, the probability of the strategy identified in Problem 1.5 failing is approximately 11%.
 
 ## Problem 1.7
-Now suppose that the CBOD and NBOD values are correlated: specifically, they have a correlation coefficient of 0.7. 
-How does that impact the probability of maintain- ing a dissolved oxygen concentration above 4 mg/L under the treatment strategy 
-from Problems 1.5? The solution template includes a code block defining a function sample_correlated_uniform() that you can use 
-to produce correlated uniform variates.
+We can use the given sample_correlated_uniform function to randomly select around 10,000 samples of correlated CBOD, NBOD river 
+concentrations and then redo the calculations in Problem 1.6 to determine failures.
 
 ```julia; echo=false
 # This block will not show up in compiled output.
@@ -290,9 +280,65 @@ function sample_correlated_uniform(n, a, b, corr_coef=0.7)
 end
 ```
 
+```julia
+fails_7 = 0;
+n = 10000;
+
+# Treated values, subscript 6 to represent this problem
+treatment = 0.117;
+CBOD2_7 = (1-treatment)*CBOD2;
+NBOD2_7 = (1-treatment)*NBOD2;
+
+# River Ranges Samples
+samples = sample_correlated_uniform(n, [4,7], [3,8], 0.7);
+
+for i in 1:n
+  CBOD_7 = samples[i,1];
+  NBOD_7 = samples[i,2];
+  DO_7 = zeros(length(x));
+
+  B01_7 = (Qr*CBOD_7 + Q1*CBOD1) / (Qr+Q1);
+  N01_7 = (Qr*NBOD_7 + Q1*NBOD1) / (Qr+Q1);
+
+  # Waste Stream 1: 0-14 km
+  for i in 1:16
+    DO_7[i] = DO_conc(Cs, C01_1, B01_7, N01_7, ka, kc, kn, x[i], U);
+  end
+
+  # Waste Stream 2: 15-50 km
+  CBOD2_river = B01_7*exp(-kc*15/U);
+  NBOD2_river = N01_7*exp(-kn*15/U);
+  C02_7 = (DO_7[16]*(Qr+Q1) + DO2*Q2) / (Qr+Q1+Q2);
+  B02_7 = (CBOD2_river*(Qr+Q1) + CBOD2_7*Q2) / (Qr+Q1+Q2);
+  N02_7 = (NBOD2_river*(Qr+Q1) + NBOD2_7*Q2) / (Qr+Q1+Q2);
+
+  for i in 16:51
+    DO_7[i] = DO_conc(Cs, C02_7, B02_7, N02_7, ka, kc, kn, x[i], U);
+  end
+
+  if minimum(DO_7) < 4
+    global fails_7 = fails_7 + 1;
+  end
+end
+
+probability7 = fails_7/n;
+print(probability7);
+```
+
+By changing the CBOD and NBOD to have a correlation coefficient of 0.7 and sampling 10,000 times from this distribution, we can get 
+a failure probability of approximately 20% (this is a general estimate after running the code several times).
+
 ## Problem 1.8
-Discuss how the presence of uncertainty and dependence between variables might affect your decision-making process. 
-Would you stick with the same strategy as in Problem 1.5, or find a new strategy? What other information would you need, if any?
+The introduction of uncertainty to the model made my chosen strategy in Problem 1.5 fail where it would have previously been sufficient to 
+meet the 4 mg/L standard. The presence of a dependence between the CBOD and NBOD concentrations only increased the probability of failure, 
+though knowing the correlation coefficient gives more information for determining a more appropriate treatment method.
+
+Knowing that this strategy would fail with even a little uncertainty, I would find a new strategy for Problem 1.5. In order to 
+address the levels of uncertainty in the problem, I would need to implement some sort of hypothesis testing where I could meet a given 
+confidence level that my treatment would not lead to failure. Implementing these statistical methods would mean knowing the mean and 
+standard deviations of the CBOD and NBOD ranges so as to better understand their distributions. Most likely, the end result of this 
+more complex/involved model would require overtreating the waste stream(s) so as to avoid low levels of dissolved oxygen even in 
+worst case CBOD and NBOD concentrations.
 
 # References
 1. Bisection Method in Julia: https://mmas.github.io/bisection-method-julia 
